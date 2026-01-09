@@ -1,3 +1,4 @@
 # scripts
-Sh scripts that I commonly use served on sh.beuzeboc.com
+Sh scripts that I commonly use.
+Served on sh.beuzeboc.com
 
