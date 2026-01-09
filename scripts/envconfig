@@ -18,7 +18,6 @@ SETUP_SCRIPT="${TARGET_DIR}/setup_env.bash"
 
 if [ -f "${SETUP_SCRIPT}" ]; then
 	echo "Executing ${SETUP_SCRIPT}..."
-	# Using bash explicitly as the file extension suggests it is a bash script
 	/bin/bash "${SETUP_SCRIPT}"
 else
 	echo "Error: ${SETUP_SCRIPT} not found." >&2
