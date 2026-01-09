@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+
+REPO_URL="https://github.com/guillaumebeuzeboc/envconfig.git"
+TARGET_DIR="${HOME}/envconfig"
+
+echo "Setting up environment configuration..."
+
+if [ -d "${TARGET_DIR}" ]; then
+	echo "Directory ${TARGET_DIR} already exists. Updating..."
+	cd "${TARGET_DIR}" && git pull
+else
+	echo "Cloning ${REPO_URL} to ${TARGET_DIR}..."
+	git clone "${REPO_URL}" "${TARGET_DIR}"
+fi
+
+SETUP_SCRIPT="${TARGET_DIR}/setup_env.bash"
+
+if [ -f "${SETUP_SCRIPT}" ]; then
+	echo "Executing ${SETUP_SCRIPT}..."
+	# Using bash explicitly as the file extension suggests it is a bash script
+	/bin/bash "${SETUP_SCRIPT}"
+else
+	echo "Error: ${SETUP_SCRIPT} not found." >&2
+	exit 1
+fi
+
+echo "Environment setup complete."
