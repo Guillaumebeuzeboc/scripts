@@ -1,0 +1,58 @@
+name: Update docs scripts list
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-scripts-list.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-scripts-list:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build scripts list
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts=$(ls -1 docs | grep -v -E '^(readme\.md)$' | sort)
+          {
+            echo "## Available scripts"
+            for script in $scripts; do
+              echo "- $script"
+            done
+          } > /tmp/scripts-list.md
+
+      - name: Update docs/readme.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+            BEGIN {in_list=0}
+            /<!-- scripts-list:start -->/ {
+              print; system("cat /tmp/scripts-list.md"); in_list=1; next
+            }
+            /<!-- scripts-list:end -->/ {in_list=0}
+            !in_list {print}
+          ' docs/readme.md > /tmp/readme.md
+          mv /tmp/readme.md docs/readme.md
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/readme.md; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git add docs/readme.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: update scripts list"
+          git push
