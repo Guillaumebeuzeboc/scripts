@@ -25,7 +25,7 @@ jobs:
           {
             echo "## Available scripts"
             for script in $scripts; do
-              echo "- $script"
+              echo "- [\`$script\`]($script)"
             done
           } > /tmp/scripts-list.md
 
