@@ -8,6 +8,6 @@ curl -sL sh.beuzeboc.com/<script_name> | bash
 ## Available scripts
 <!-- scripts-list:start -->
 ## Available scripts
-- envconfig
-- ros2
+- [`envconfig`](envconfig)
+- [`ros2`](ros2)
 <!-- scripts-list:end -->
