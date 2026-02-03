@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          scripts=$(ls -1 docs | grep -v -E '^(readme\.md)$' | sort)
+          scripts=$(ls -1 docs | grep -v -E '^(readme\.md|CNAME)$' | sort)
           {
             echo "## Available scripts"
             for script in $scripts; do
