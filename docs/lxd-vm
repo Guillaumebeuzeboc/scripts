@@ -1,0 +1,51 @@
+#!/bin/sh
+set -e
+
+DEFAULT_REMOTE=""
+if command -v lxc >/dev/null 2>&1; then
+	DEFAULT_REMOTE=$(lxc remote list 2>/dev/null | awk 'NR>1 && $NF=="YES" {print $1; exit}')
+fi
+if [ -z "${DEFAULT_REMOTE}" ]; then
+	DEFAULT_REMOTE="local"
+fi
+
+DEFAULT_VERSION="24.04"
+DEFAULT_MEMORY_GIB="8"
+DEFAULT_CPU="8"
+DEFAULT_DISK_GIB="40"
+DEFAULT_VM_NAME="my-vm"
+
+INPUT="/dev/stdin"
+if [ ! -t 0 ] && [ -r /dev/tty ]; then
+	INPUT="/dev/tty"
+fi
+
+printf "Remote [%s]: " "${DEFAULT_REMOTE}"
+read -r REMOTE < "${INPUT}"
+REMOTE=${REMOTE:-${DEFAULT_REMOTE}}
+
+printf "Ubuntu version [%s]: " "${DEFAULT_VERSION}"
+read -r VERSION < "${INPUT}"
+VERSION=${VERSION:-${DEFAULT_VERSION}}
+
+printf "Memory (GiB) [%s]: " "${DEFAULT_MEMORY_GIB}"
+read -r MEMORY_GIB < "${INPUT}"
+MEMORY_GIB=${MEMORY_GIB:-${DEFAULT_MEMORY_GIB}}
+
+printf "CPU cores [%s]: " "${DEFAULT_CPU}"
+read -r CPU < "${INPUT}"
+CPU=${CPU:-${DEFAULT_CPU}}
+
+printf "Disk size (GiB) [%s]: " "${DEFAULT_DISK_GIB}"
+read -r DISK_GIB < "${INPUT}"
+DISK_GIB=${DISK_GIB:-${DEFAULT_DISK_GIB}}
+
+printf "VM name [%s]: " "${DEFAULT_VM_NAME}"
+read -r VM_NAME < "${INPUT}"
+VM_NAME=${VM_NAME:-${DEFAULT_VM_NAME}}
+
+echo "Launching ${VM_NAME} from ${REMOTE}:${VERSION}"
+lxc launch "ubuntu:${VERSION}" "${REMOTE}:${VM_NAME}" --vm \
+	-c "limits.cpu=${CPU}" \
+	-c "limits.memory=${MEMORY_GIB}GiB" \
+	-d "root,size=${DISK_GIB}GiB"
