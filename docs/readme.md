@@ -8,5 +8,6 @@ curl -sL sh.beuzeboc.com/<script_name> | bash
 <!-- scripts-list:start -->
 ## Available scripts
 - [`envconfig`](envconfig)
+- [`lxd-vm`](lxd-vm)
 - [`ros2`](ros2)
 <!-- scripts-list:end -->
