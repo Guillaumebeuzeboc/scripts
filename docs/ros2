@@ -24,6 +24,9 @@ jammy)
 noble)
 	ROS_DISTRO="jazzy"
 	;;
+resolute)
+	ROS_DISTRO="lyrical"
+	;;
 focal)
 	ROS_DISTRO="foxy"
 	;;
