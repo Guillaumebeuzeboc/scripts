@@ -77,8 +77,14 @@ apply_docker_user_rules() {
 }
 
 select_bridges() {
-  default_bridge="lxdbr0"
   bridges="$(list_lxd_bridges)"
+  first_bridge="$(echo "$bridges" | awk 'NR==1 {print; exit}')"
+
+  if echo "$bridges" | grep -Fxq "lxdbr0"; then
+    default_bridge="lxdbr0"
+  else
+    default_bridge="$first_bridge"
+  fi
 
   echo "Available LXD bridges:" >&2
   echo "$bridges" | sed 's/^/- /' >&2
