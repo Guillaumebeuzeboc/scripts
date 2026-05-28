@@ -9,7 +9,6 @@ curl -sL sh.beuzeboc.com/<script_name> | bash
 ## Available scripts
 - [`envconfig`](envconfig)
 - [`lxd-docker`](lxd-docker)
-- [`lxd-docker-network-fix`](lxd-docker-network-fix)
 - [`lxd-vm`](lxd-vm)
 - [`ros2`](ros2)
 <!-- scripts-list:end -->
