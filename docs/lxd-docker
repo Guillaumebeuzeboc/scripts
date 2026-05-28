@@ -1,0 +1,125 @@
+#!/bin/sh
+set -eu
+
+# Fix LXD/Docker connectivity issues caused by Docker setting FORWARD policy to DROP.
+# Reference:
+# https://documentation.ubuntu.com/lxd/default/howto/network_bridge_firewalld/#prevent-connectivity-issues-with-lxd-and-docker
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: run as root (use sudo)." >&2
+    exit 1
+  fi
+}
+
+list_bridges() {
+  # Prefer LXD bridge list when available.
+  if command -v lxc >/dev/null 2>&1; then
+    lxc network list --format csv -c nt 2>/dev/null | awk -F, '$2=="bridge" {print $1}' || true
+    return
+  fi
+
+  # Fallback to Linux bridges if lxc is unavailable.
+  if command -v ip >/dev/null 2>&1; then
+    ip -o link show type bridge 2>/dev/null | awk -F': ' '{print $2}' || true
+  fi
+}
+
+bridge_exists() {
+  bridge="$1"
+
+  if command -v lxc >/dev/null 2>&1 && lxc network show "$bridge" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v ip >/dev/null 2>&1 && ip link show "$bridge" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+ensure_iptables_tools() {
+  if ! command -v iptables >/dev/null 2>&1 || ! command -v ip6tables >/dev/null 2>&1; then
+    echo "Error: iptables/ip6tables not found. Install iptables and retry." >&2
+    exit 1
+  fi
+}
+
+ensure_chain() {
+  table_bin="$1"
+  if ! "$table_bin" -nL DOCKER-USER >/dev/null 2>&1; then
+    echo "Error: ${table_bin} chain DOCKER-USER not found." >&2
+    echo "Start Docker first so the DOCKER-USER chain exists, then re-run this script." >&2
+    exit 1
+  fi
+}
+
+ensure_rule() {
+  table_bin="$1"
+  shift
+  if "$table_bin" -C DOCKER-USER "$@" >/dev/null 2>&1; then
+    echo "${table_bin}: rule already present: $*"
+  else
+    "$table_bin" -I DOCKER-USER "$@"
+    echo "${table_bin}: added rule: $*"
+  fi
+}
+
+apply_docker_user_rules() {
+  bridge="$1"
+
+  ensure_iptables_tools
+  ensure_chain iptables
+  ensure_chain ip6tables
+
+  ensure_rule iptables  -i "$bridge" -j ACCEPT
+  ensure_rule ip6tables -i "$bridge" -j ACCEPT
+  ensure_rule iptables  -o "$bridge" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+  ensure_rule ip6tables -o "$bridge" -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save
+    echo "Saved firewall rules with netfilter-persistent."
+  elif command -v iptables-save >/dev/null 2>&1; then
+    echo "Important: make firewall rules persistent across reboots for your distro."
+    echo "Suggestion (Debian/Ubuntu): install iptables-persistent (netfilter-persistent)."
+  fi
+}
+
+select_bridge() {
+  default_bridge="lxdbr0"
+
+  bridges="$(list_bridges | sed '/^$/d' | sort -u)"
+
+  echo "Available bridges:" >&2
+  if [ -n "$bridges" ]; then
+    echo "$bridges" | sed 's/^/- /' >&2
+  else
+    echo "- (none detected automatically)" >&2
+  fi
+
+  INPUT="/dev/stdin"
+  # For curl|bash, stdin is usually the script stream, so read user input from /dev/tty
+  # only when stdout is attached to a terminal and /dev/tty is available.
+  if [ ! -t 0 ] && [ -t 1 ] && [ -r /dev/tty ]; then
+    INPUT="/dev/tty"
+  fi
+
+  printf "Bridge to use [%s]: " "$default_bridge" >&2
+  read -r selected < "$INPUT"
+  selected=${selected:-$default_bridge}
+
+  if ! bridge_exists "$selected"; then
+    echo "Error: bridge '$selected' not found on this host." >&2
+    exit 1
+  fi
+
+  echo "$selected"
+}
+
+require_root
+BRIDGE="$(select_bridge)"
+apply_docker_user_rules "$BRIDGE"
+
+echo "Done."
