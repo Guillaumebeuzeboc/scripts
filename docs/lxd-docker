@@ -12,31 +12,20 @@ require_root() {
   fi
 }
 
-list_bridges() {
-  # Prefer LXD bridge list when available.
-  if command -v lxc >/dev/null 2>&1; then
-    lxc network list --format csv -c nt 2>/dev/null | awk -F, '$2=="bridge" {print $1}' || true
-    return
+list_lxd_bridges() {
+  if ! command -v lxc >/dev/null 2>&1; then
+    echo "Error: lxc command not found. Install/start LXD and retry." >&2
+    exit 1
   fi
 
-  # Fallback to Linux bridges if lxc is unavailable.
-  if command -v ip >/dev/null 2>&1; then
-    ip -o link show type bridge 2>/dev/null | awk -F': ' '{print $2}' || true
-  fi
-}
+  bridges="$(lxc network list --format csv -c nt 2>/dev/null | awk -F, '$2=="bridge" {print $1}' | sed '/^$/d' | sort -u)"
 
-bridge_exists() {
-  bridge="$1"
-
-  if command -v lxc >/dev/null 2>&1 && lxc network show "$bridge" >/dev/null 2>&1; then
-    return 0
+  if [ -z "$bridges" ]; then
+    echo "Error: no LXD bridge networks found in 'lxc network list'." >&2
+    exit 1
   fi
 
-  if command -v ip >/dev/null 2>&1 && ip link show "$bridge" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  return 1
+  echo "$bridges"
 }
 
 ensure_iptables_tools() {
@@ -87,17 +76,12 @@ apply_docker_user_rules() {
   fi
 }
 
-select_bridge() {
+select_bridges() {
   default_bridge="lxdbr0"
+  bridges="$(list_lxd_bridges)"
 
-  bridges="$(list_bridges | sed '/^$/d' | sort -u)"
-
-  echo "Available bridges:" >&2
-  if [ -n "$bridges" ]; then
-    echo "$bridges" | sed 's/^/- /' >&2
-  else
-    echo "- (none detected automatically)" >&2
-  fi
+  echo "Available LXD bridges:" >&2
+  echo "$bridges" | sed 's/^/- /' >&2
 
   INPUT="/dev/stdin"
   # For curl|bash, stdin is usually the script stream, so read user input from /dev/tty
@@ -106,12 +90,22 @@ select_bridge() {
     INPUT="/dev/tty"
   fi
 
+  printf "Apply fix to ALL bridges above? [Y/n]: " >&2
+  read -r answer < "$INPUT" || answer=""
+
+  case "${answer:-Y}" in
+    y|Y|yes|YES|"")
+      echo "$bridges"
+      return
+      ;;
+  esac
+
   printf "Bridge to use [%s]: " "$default_bridge" >&2
   read -r selected < "$INPUT"
   selected=${selected:-$default_bridge}
 
-  if ! bridge_exists "$selected"; then
-    echo "Error: bridge '$selected' not found on this host." >&2
+  if ! echo "$bridges" | grep -Fxq "$selected"; then
+    echo "Error: '$selected' is not a LXD bridge from 'lxc network list'." >&2
     exit 1
   fi
 
@@ -119,7 +113,12 @@ select_bridge() {
 }
 
 require_root
-BRIDGE="$(select_bridge)"
-apply_docker_user_rules "$BRIDGE"
+SELECTED_BRIDGES="$(select_bridges)"
+
+echo "$SELECTED_BRIDGES" | while IFS= read -r bridge; do
+  [ -n "$bridge" ] || continue
+  echo "Applying rules for bridge: $bridge"
+  apply_docker_user_rules "$bridge"
+done
 
 echo "Done."
