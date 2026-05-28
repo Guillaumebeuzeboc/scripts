@@ -12,17 +12,31 @@ require_root() {
   fi
 }
 
-list_lxd_bridges() {
+list_lxd_managed_bridges() {
   if ! command -v lxc >/dev/null 2>&1; then
     echo "Error: lxc command not found. Install/start LXD and retry." >&2
-    exit 1
+    return 1
   fi
 
-  bridges="$(lxc network list --format csv -c nt 2>/dev/null | awk -F, '$2=="bridge" {print $1}' | sed '/^$/d' | sort -u)"
+  # Prefer CSV output: name, managed, type
+  bridges="$(lxc network list --format csv -c nmt 2>/dev/null \
+    | awk -F, 'tolower($2)=="yes" && tolower($3)=="bridge" {print $1}' \
+    | sed '/^$/d' | sort -u)"
 
+  # Fallback for older lxc versions that don't support --format csv/-c nmt reliably.
   if [ -z "$bridges" ]; then
-    echo "Error: no LXD bridge networks found in 'lxc network list'." >&2
-    exit 1
+    bridges="$(lxc network list 2>/dev/null \
+      | awk -F'|' '
+          BEGIN { OFS="" }
+          /^\+/ { next }
+          NF >= 8 {
+            name=$2; type=$3; managed=$4;
+            gsub(/^[ \t]+|[ \t]+$/, "", name);
+            gsub(/^[ \t]+|[ \t]+$/, "", type);
+            gsub(/^[ \t]+|[ \t]+$/, "", managed);
+            if (tolower(type)=="bridge" && tolower(managed)=="yes") print name;
+          }
+        ' | sed '/^$/d' | sort -u)"
   fi
 
   echo "$bridges"
@@ -77,7 +91,13 @@ apply_docker_user_rules() {
 }
 
 select_bridges() {
-  bridges="$(list_lxd_bridges)"
+  bridges="$(list_lxd_managed_bridges)"
+
+  if [ -z "$bridges" ]; then
+    echo "Error: no managed LXD bridge networks found in 'lxc network list'." >&2
+    exit 1
+  fi
+
   first_bridge="$(echo "$bridges" | awk 'NR==1 {print; exit}')"
 
   if echo "$bridges" | grep -Fxq "lxdbr0"; then
@@ -86,7 +106,7 @@ select_bridges() {
     default_bridge="$first_bridge"
   fi
 
-  echo "Available LXD bridges:" >&2
+  echo "Available managed LXD bridges:" >&2
   echo "$bridges" | sed 's/^/- /' >&2
 
   INPUT="/dev/stdin"
@@ -111,7 +131,7 @@ select_bridges() {
   selected=${selected:-$default_bridge}
 
   if ! echo "$bridges" | grep -Fxq "$selected"; then
-    echo "Error: '$selected' is not a LXD bridge from 'lxc network list'." >&2
+    echo "Error: '$selected' is not a managed LXD bridge from 'lxc network list'." >&2
     exit 1
   fi
 
